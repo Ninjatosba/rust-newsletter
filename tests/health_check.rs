@@ -1,12 +1,14 @@
+use std::net::TcpListener;
+
 use actix_web::{HttpResponse, ResponseError, dev::Response};
 use newsletter::run;
 
 #[actix_rt::test]
 async fn health_check_works() {
-    let _ = spawn_app();
+    let address = spawn_app();
     let client = reqwest::Client::new();
     let response = client
-        .get("http://127.0.0.1:8080/health")
+        .get(&format!("{}/health", &address))
         .send()
         .await
         .expect("Failed to send request");
@@ -14,8 +16,10 @@ async fn health_check_works() {
     assert_eq!(response.content_length(), Some(0));
 }
 
-fn spawn_app() -> std::io::Result<()> {
-    let server = run().expect("Failed to bind address");
+fn spawn_app() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
+    let address = listener.local_addr().unwrap();
+    let server = run(listener).expect("Failed to bind address");
     let _ = tokio::spawn(server);
-    Ok(())
+    format!("http://{}", address.to_string())
 }
