@@ -13,6 +13,7 @@ name = "newsletter"
 actix-web = "4.0"
 config = { version = "0.15.16", features = ["yaml","json"] }
 serde = { version = "1.0.219", features = ["derive"] }
+dotenv = "0.15.0"
 
 
 

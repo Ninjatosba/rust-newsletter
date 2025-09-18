@@ -31,7 +31,7 @@ async fn health_check_works() {
 async fn subscribe_returns_a_200_for_valid_form_data() {
     let app_address = spawn_app();
     let configuration = configuration::get_configuration().expect("Failed to read configuration");
-    let connection = PgConnection::connect(&configuration.database.connection_string())
+    let mut connection = PgConnection::connect(&configuration.database.connection_string())
         .await
         .expect("Failed to connect to Postgres");
     let client = reqwest::Client::new();
@@ -44,8 +44,14 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
         .send()
         .await
         .expect("Failed to execute message");
+
     //assert
-    assert_eq!(response.status().as_u16(), 200)
+    assert_eq!(response.status().as_u16(), 200);
+    let saved = sqlx::query!("SELECT email FROM subscriptions",)
+        .fetch_one(&mut connection)
+        .await
+        .expect("Failed to fetch saved subscription");
+    assert_eq!(saved.email, "ursula_le_guin@gmail.com");
 }
 
 #[actix_rt::test]
