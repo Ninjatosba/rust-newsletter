@@ -1,8 +1,10 @@
 use std::net::TcpListener;
 
 use actix_web::{dev::Response, HttpResponse, ResponseError};
-use newsletter::startup::run;
+use newsletter::{configuration, startup::run};
 use reqwest::Method;
+
+use sqlx::{Connection, PgConnection};
 
 fn spawn_app() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
@@ -28,6 +30,10 @@ async fn health_check_works() {
 #[actix_rt::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
     let app_address = spawn_app();
+    let configuration = configuration::get_configuration().expect("Failed to read configuration");
+    let connection = PgConnection::connect(&configuration.database.connection_string())
+        .await
+        .expect("Failed to connect to Postgres");
     let client = reqwest::Client::new();
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
 
