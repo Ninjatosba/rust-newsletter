@@ -1,7 +1,7 @@
 use std::net::TcpListener;
 
-use actix_web::{HttpResponse, ResponseError, dev::Response};
-use newsletter::run;
+use actix_web::{dev::Response, HttpResponse, ResponseError};
+use newsletter::startup::run;
 use reqwest::Method;
 
 fn spawn_app() -> String {
