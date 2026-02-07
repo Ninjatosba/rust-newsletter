@@ -2,12 +2,13 @@ use std::net::TcpListener;
 
 use actix_web::{dev::Response, HttpResponse, ResponseError};
 use newsletter::{
-    configuration::{self, get_configuration},
+    configuration::{self, get_configuration, DatabaseSettings},
     startup::run,
 };
 use reqwest::Method;
 
-use sqlx::{Connection, PgConnection, PgPool};
+use sqlx::{Connection, Executor, PgConnection, PgPool};
+use uuid::Uuid;
 
 struct TestApp {
     address: String,
@@ -17,18 +18,41 @@ struct TestApp {
 async fn spawn_app() -> TestApp {
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
-    let address = listener.local_addr().unwrap();
+    let address = format!("http://127.0.0.1:{}", port);
 
-    let configuration = get_configuration().expect("Failed to read configuration");
-    let connection_pool = PgPool::connect(&configuration.database.connection_string())
-        .await
-        .expect("Failed to connect to Postgres");
+    let mut configuration = get_configuration().expect("Failed to read configuration.");
+    configuration.database.database_name = Uuid::new_v4().to_string();
+    let connection_pool = configure_database(&configuration.database).await;
     let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
     let _ = tokio::spawn(server);
     TestApp {
-        address: format!("http://{}", address),
+        address,
         db_pool: connection_pool,
     }
+}
+
+pub async fn configure_database(configuration: &DatabaseSettings) -> PgPool {
+    let mut connection = PgConnection::connect(&configuration.connection_string_without_db())
+        .await
+        .expect("Failed to connect to Postgres");
+
+    connection
+        .execute(format!(r#"CREATE DATABASE "{}";"#, configuration.database_name).as_str())
+        .await
+        .expect("Failed to create database.");
+
+    drop(connection);
+
+    let connection_pool = PgPool::connect(&configuration.connection_string())
+        .await
+        .expect("Failed to connect to Postgres");
+
+    sqlx::migrate!("./migrations")
+        .run(&connection_pool)
+        .await
+        .expect("Failed to migrate the database");
+
+    connection_pool
 }
 
 #[actix_rt::test]
@@ -60,7 +84,7 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 
     //assert
     assert_eq!(response.status().as_u16(), 200);
-    let saved = sqlx::query!("SELECT email FROM subscriptions",)
+    let saved = sqlx::query!("SELECT email FROM subscriptions")
         .fetch_one(&app.db_pool)
         .await
         .expect("Failed to fetch saved subscription");
